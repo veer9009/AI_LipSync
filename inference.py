@@ -6,7 +6,6 @@ from tqdm import tqdm
 from glob import glob
 import torch, face_detection
 from models import Wav2Lip
-import platform
 
 parser = argparse.ArgumentParser(description='Inference code to lip-sync videos in the wild using Wav2Lip models')
 
@@ -20,8 +19,8 @@ parser.add_argument('--audio', type=str,
 parser.add_argument('--outfile', type=str, help='Video path to save result. See default for an e.g.', 
 								default='results/result_voice.mp4')
 
-parser.add_argument('--static', type=bool, 
-					help='If True, then use only first video frame for inference', default=False)
+parser.add_argument('--static', action='store_true',
+					help='Use only the first video frame for inference')
 parser.add_argument('--fps', type=float, help='Can be specified only if input is a static image (default: 25)', 
 					default=25., required=False)
 
@@ -53,7 +52,7 @@ parser.add_argument('--nosmooth', default=False, action='store_true',
 args = parser.parse_args()
 args.img_size = 96
 
-if os.path.isfile(args.face) and args.face.split('.')[1] in ['jpg', 'png', 'jpeg']:
+if os.path.isfile(args.face) and os.path.splitext(args.face)[1].lower() in ['.jpg', '.png', '.jpeg']:
 	args.static = True
 
 def get_smoothened_boxes(boxes, T):
@@ -182,7 +181,7 @@ def main():
 	if not os.path.isfile(args.face):
 		raise ValueError('--face argument must be a valid path to video/image file')
 
-	elif args.face.split('.')[1] in ['jpg', 'png', 'jpeg']:
+	elif os.path.splitext(args.face)[1].lower() in ['.jpg', '.png', '.jpeg']:
 		full_frames = [cv2.imread(args.face)]
 		fps = args.fps
 
@@ -202,7 +201,7 @@ def main():
 				frame = cv2.resize(frame, (frame.shape[1]//args.resize_factor, frame.shape[0]//args.resize_factor))
 
 			if args.rotate:
-				frame = cv2.rotate(frame, cv2.cv2.ROTATE_90_CLOCKWISE)
+				frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
 
 			y1, y2, x1, x2 = args.crop
 			if x2 == -1: x2 = frame.shape[1]
@@ -216,9 +215,7 @@ def main():
 
 	if not args.audio.endswith('.wav'):
 		print('Extracting raw audio...')
-		command = 'ffmpeg -y -i {} -strict -2 {}'.format(args.audio, 'temp/temp.wav')
-
-		subprocess.call(command, shell=True)
+		subprocess.run(['ffmpeg', '-y', '-i', args.audio, '-strict', '-2', 'temp/temp.wav'], check=True)
 		args.audio = 'temp/temp.wav'
 
 	wav = audio.load_wav(args.audio, 16000)
@@ -273,8 +270,8 @@ def main():
 
 	out.release()
 
-	command = 'ffmpeg -y -i {} -i {} -strict -2 -q:v 1 {}'.format(args.audio, 'temp/result.avi', args.outfile)
-	subprocess.call(command, shell=platform.system() != 'Windows')
+	os.makedirs(os.path.dirname(args.outfile) or '.', exist_ok=True)
+	subprocess.run(['ffmpeg', '-y', '-i', args.audio, '-i', 'temp/result.avi', '-strict', '-2', '-q:v', '1', args.outfile], check=True)
 
 if __name__ == '__main__':
 	main()
